@@ -1,0 +1,7 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.rds
+/identifying_mixture_models_cache
+/identifying_mixture_models_files
