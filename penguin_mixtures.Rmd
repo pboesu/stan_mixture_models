@@ -5,6 +5,8 @@ output: html_notebook
 
 ```{r}
 library(rstan)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
 ```
 
 
@@ -113,14 +115,14 @@ input_data <- list("y"=y, "N"=N, "min_y" = min(y), "max_y" = max(y))
 
 hist(y, breaks = length(unique(y)))
 
-aggregate(y, length)
+count_data = aggregate(y, by = list(y),FUN = length)
 #reconstruct count data 
 
 ```
 
 ```{r}
 ordered_fit <- stan(file='gauss_mix_ordered_prior_peng.stan', data=input_data,
-                    chains=2, iter =2000, seed=483892929, refresh=1000)
+                    chains=2, iter =2000, seed=483892920)
 ```
 
 ```{r HMC_diagnostics}
@@ -130,3 +132,74 @@ traceplot(ordered_fit)
 ```{r viz_fit}
 hist(y)
 ```
+
+##parameteric curve fits
+
+```{r}
+
+count_data_moult <- structure(list(N = 54L, counts = c(21L, 10L, 31L, 53L, 59L, 97L, 
+124L, 92L, 174L, 150L, 138L, 103L, 57L, 37L, 39L, 39L, 23L, 14L, 
+15L, 9L, 8L, 6L, 8L, 15L, 20L, 20L, 61L, 64L, 77L, 91L, 132L, 
+122L, 199L, 267L, 366L, 354L, 520L, 513L, 645L, 774L, 858L, 685L, 
+425L, 363L, 292L, 187L, 81L, 11L, 25L, 3L, 1L, 5L, 3L, 1L), times = c(153, 
+154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 
+167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 
+180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 
+193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 
+206), min_times = 153, max_times = 206), .Names = c("N", "counts", 
+"times", "min_times", "max_times"))
+
+count_data_incubation <- structure(list(N = 25L, counts = c(10L, 19L, 30L, 61L, 60L, 67L, 
+165L, 157L, 110L, 51L, 18L, 9L, 8L, 7L, 7L, 12L, 23L, 51L, 91L, 
+141L, 160L, 122L, 70L, 41L, 57L), times = c(54, 55, 56, 57, 58, 
+59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 
+75, 76, 77, 78), min_times = 54, max_times = 78), .Names = c("N", 
+"counts", "times", "min_times", "max_times"))
+```
+
+```{r}
+plot(counts ~ times, count_data_incubation)
+```
+
+```{r}
+two_normals_pois_fit <- stan(file = "stan_models/two_gauss_same_sigma_pois.stan", 
+                           model_name = "TwoNormalsPois", 
+                           data = count_data_incubation,
+                           chains = 4,
+                           iter = 4000,
+                           control = list(adapt_delta = 0.999)
+)
+traceplot(two_normals_pois_fit, pars = c("proportion", "sigma1", "mean1", "mean2", "total_birds" ))
+plot(two_normals_pois_fit,  pars = c("proportion", "sigma1", "mean1", "mean2", "total_birds" ))
+```
+
+```{r}
+two_normals_nb_fit <- stan(file = "stan_models/two_gauss_same_sigma_negbin.stan", 
+                           model_name = "TwoNormalsNB", 
+                           data = count_data_incubation,
+                           chains = 4,
+                           iter = 4000,
+                           control = list(adapt_delta = 0.999)
+)
+```
+```{r}
+traceplot(two_normals_nb_fit, pars = c("proportion", "sigma1", "mean1", "mean2", "total_birds", "phi" ))
+#plot(two_normals_pois_fit,  pars = c("proportion", "sigma1", "mean1", "mean2", "total_birds" ))
+```
+
+```{r}
+xpred <- seq(53,80,length.out = 100)
+pars_post_mean <- get_posterior_mean(two_normals_pois_fit, c("proportion", "sigma1", "mean1", "mean2", "total_birds" ))[,5]
+plot(counts ~ times, count_data_incubation)
+lines(xpred, dnorm(xpred, pars_post_mean["mean1"], pars_post_mean["sigma1"])*pars_post_mean["total_birds"]*pars_post_mean["proportion"])
+lines(xpred, dnorm(xpred, pars_post_mean["mean2"], pars_post_mean["sigma1"])*pars_post_mean["total_birds"]*(1-pars_post_mean["proportion"]))
+#abline(h=5:7,col = "red")
+
+pars_post_mean <- get_posterior_mean(two_normals_nb_fit, c("proportion", "sigma1", "mean1", "mean2", "total_birds"))[,5]
+#plot(incubation_out$sday_loc, incubation_out$n_peng)
+lines(xpred, dnorm(xpred, pars_post_mean["mean1"], pars_post_mean["sigma1"])*pars_post_mean["total_birds"]*pars_post_mean["proportion"], col = "red")
+lines(xpred, dnorm(xpred, pars_post_mean["mean2"], pars_post_mean["sigma1"])*pars_post_mean["total_birds"]*(1-pars_post_mean["proportion"]), col = "red")
+#abline(h=pars_post_mean["offset"],col = "red")
+
+```
+
